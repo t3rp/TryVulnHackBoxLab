@@ -15,6 +15,7 @@ pkgs.mkShell {
     python3Packages.pip
     python3Packages.pillow
     python3Packages.ocrmypdf
+    python3Packages.tqdm
     
     # OCR dependencies
     tesseract
