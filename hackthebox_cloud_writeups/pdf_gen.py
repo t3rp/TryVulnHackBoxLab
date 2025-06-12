@@ -3,21 +3,17 @@ import sys
 import argparse
 from PIL import Image
 import ocrmypdf
+from tqdm import tqdm
 
 def fix_image_size(image):
-    # Your images are already close to the right size, so just return them
-    # But convert to ensure good OCR quality
-    
-    # Convert to RGB if not already
+    # Convert to RGB and return - no resizing at all
     if image.mode != 'RGB':
         image = image.convert('RGB')
     
-    # Increase contrast slightly for better OCR
+    # Slight contrast enhancement for OCR only
     from PIL import ImageEnhance
     enhancer = ImageEnhance.Contrast(image)
-    image = enhancer.enhance(1.2)
-    
-    return image
+    return enhancer.enhance(1.1)
 
 def create_pdf(folder, output_file):
     # Find image files
@@ -39,10 +35,12 @@ def create_pdf(folder, output_file):
     
     print(f"Processing {len(image_files)} images...")
     
-    # Process all images
+    # Process all images with progress bar
     processed_images = []
-    for i, filename in enumerate(image_files):
-        # print(f"Processing page {i+1}")
+    for filename in tqdm(image_files, 
+                        desc="Processing pages", 
+                        unit="page", 
+                        bar_format="{desc:<18} {bar} {percentage:3.0f}% {n_fmt}/{total_fmt} {elapsed}"):
         
         image_path = os.path.join(folder, filename)
         image = Image.open(image_path).convert('RGB')
