@@ -4,103 +4,78 @@ import argparse
 from PIL import Image
 import ocrmypdf
 
-def normalize_image(image, target_width=None, target_height=None):
-    """Normalize image size and aspect ratio to prevent skewing"""
-    if target_width is None or target_height is None:
-        # Use A4 proportions as default (210:297 ratio)
-        target_width = 2100
-        target_height = 2970
+def fix_image_size(image):
+    # Your images are already close to the right size, so just return them
+    # But convert to ensure good OCR quality
     
-    # Calculate aspect ratios
-    original_ratio = image.width / image.height
-    target_ratio = target_width / target_height
+    # Convert to RGB if not already
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
     
-    if original_ratio > target_ratio:
-        # Image is wider than target, fit by width
-        new_width = target_width
-        new_height = int(target_width / original_ratio)
-    else:
-        # Image is taller than target, fit by height
-        new_height = target_height
-        new_width = int(target_height * original_ratio)
+    # Increase contrast slightly for better OCR
+    from PIL import ImageEnhance
+    enhancer = ImageEnhance.Contrast(image)
+    image = enhancer.enhance(1.2)
     
-    # Resize image maintaining aspect ratio
-    resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-    
-    # Create a white background with target dimensions
-    background = Image.new('RGB', (target_width, target_height), 'white')
-    
-    # Calculate position to center the image
-    x = (target_width - new_width) // 2
-    y = (target_height - new_height) // 2
-    
-    # Paste the resized image onto the background
-    background.paste(resized_image, (x, y))
-    
-    return background
+    return image
 
-def images_to_pdf(image_folder, output_pdf):
-    # Support multiple image formats
-    image_extensions = {'.jpeg', '.jpg', '.png', '.bmp', '.tiff', '.webp'}
-    files = [f for f in os.listdir(image_folder) 
-             if os.path.splitext(f.lower())[1] in image_extensions]
+def create_pdf(folder, output_file):
+    # Find image files
+    image_files = []
+    for file in os.listdir(folder):
+        if file.lower().endswith(('.png', '.jpg', '.jpeg')):
+            image_files.append(file)
     
-    # Sort numerically by filename
-    files = sorted(files, key=lambda f: int(''.join(filter(str.isdigit, os.path.splitext(f)[0])) or '0'))
-
-    if not files:
-        print(f"No image files found in folder: {image_folder}")
+    if not image_files:
+        print("No images found!")
         return
-
-    print(f"Found {len(files)} images to process...")
     
-    # Process first image to get target dimensions
-    first_image_path = os.path.join(image_folder, files[0])
-    first_image = Image.open(first_image_path).convert("RGB")
+    # Sort by number in filename
+    def get_page_number(filename):
+        numbers = ''.join(c for c in filename if c.isdigit())
+        return int(numbers) if numbers else 0
     
-    # Normalize first image
-    normalized_first = normalize_image(first_image)
-    target_width, target_height = normalized_first.size
+    image_files.sort(key=get_page_number)
     
-    print(f"Normalizing images to {target_width}x{target_height}...")
+    print(f"Processing {len(image_files)} images...")
     
-    # Process remaining images
-    image_list = []
-    for i, filename in enumerate(files[1:], 2):
-        print(f"Processing image {i}/{len(files)}: {filename}")
-        image_path = os.path.join(image_folder, filename)
-        image = Image.open(image_path).convert("RGB")
-        normalized_image = normalize_image(image, target_width, target_height)
-        image_list.append(normalized_image)
-
-    # Save images as a non-searchable PDF first
-    temp_pdf = "temp_output.pdf"
+    # Process all images
+    processed_images = []
+    for i, filename in enumerate(image_files):
+        print(f"Processing page {i+1}")
+        
+        image_path = os.path.join(folder, filename)
+        image = Image.open(image_path).convert('RGB')
+        fixed_image = fix_image_size(image)
+        processed_images.append(fixed_image)
+    
+    # Create PDF
     print("Creating PDF...")
-    normalized_first.save(temp_pdf, save_all=True, append_images=image_list)
-
-    # Apply OCR to make the PDF searchable
-    print("Applying OCR...")
-    ocrmypdf.ocr(temp_pdf, output_pdf, deskew=True)
-
-    # Remove temp file
+    temp_pdf = "temp.pdf"
+    first_page = processed_images[0]
+    other_pages = processed_images[1:]
+    first_page.save(temp_pdf, save_all=True, append_images=other_pages)
+    
+    # Add OCR to make searchable
+    print("Adding OCR...")
+    ocrmypdf.ocr(temp_pdf, output_file, deskew=True)
+    
+    # Clean up
     os.remove(temp_pdf)
-
-    print(f"Searchable PDF saved as: {output_pdf}")
+    print(f"Done! Saved: {output_file}")
 
 def main():
     parser = argparse.ArgumentParser(description='Convert images to searchable PDF')
-    parser.add_argument('folder', nargs='?', default='.', 
-                       help='Folder containing images (default: current directory)')
-    parser.add_argument('-o', '--output', default='writeup.pdf',
-                       help='Output PDF filename (default: writeup.pdf)')
+    parser.add_argument('folder', help='Folder with images')
+    parser.add_argument('-o', '--output', default='document.pdf', help='Output PDF name')
     
     args = parser.parse_args()
     
     if not os.path.isdir(args.folder):
-        print(f"Error: '{args.folder}' is not a valid directory")
+        print(f"Folder not found: {args.folder}")
         sys.exit(1)
     
-    images_to_pdf(args.folder, args.output)
+    create_pdf(args.folder, args.output)
 
 if __name__ == "__main__":
     main()
