@@ -42,7 +42,7 @@ def create_pdf(folder, output_file):
     # Process all images
     processed_images = []
     for i, filename in enumerate(image_files):
-        print(f"Processing page {i+1}")
+        # print(f"Processing page {i+1}")
         
         image_path = os.path.join(folder, filename)
         image = Image.open(image_path).convert('RGB')
